@@ -1,0 +1,11 @@
+[
+  {
+    "user" : "your-account-here",
+    "password" : "your-password-here",
+    "url" : "imap.gmail.com",
+    "port" : "993",
+    "mailbox" : "Inbox",
+    "key" : "Subject",
+    "value" : "Test"
+  }
+]
