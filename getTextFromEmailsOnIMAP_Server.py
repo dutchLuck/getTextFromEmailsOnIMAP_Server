@@ -104,6 +104,7 @@ def processCommandLine():
     return args
 
 def main():
+    capabilitySet = {}
     args = processCommandLine()
     if options["help"]:
         usage()
@@ -154,11 +155,25 @@ def main():
         print("OS error: {0}".format(err), file=sys.stderr)
         print('?? Unable to connect to "%s" on port "%s"?' % ( imap_url, imap_port ), file=sys.stderr)
     else:
-    # If port 993 then don't need start TLS step
-        if imap_port != "993":
-            response, data = my_mail.starttls()
+        # Show Protocol version if verbose output is selected
+        response, data = my_mail.capability()
+        if response == 'OK' :
+            capabilitySet = set( str( data[0], 'utf-8' ).split())
             if options["verbose"]:
-                print( 'STARTTLS response was: "%s"' % response, file=sys.stderr )
+                print( 'Capabilility Set is: %s' % capabilitySet )
+        else:
+            print( '?? Capability response was: "%s"' % response, file=sys.stderr )
+        if options["verbose"]:
+            print( 'Server "%s" runs protocol version: "%s"' % ( imap_url, my_mail.PROTOCOL_VERSION ), file=sys.stderr)
+            print( 'Capability response was: "%s"' % response, file=sys.stderr )
+    # If port 143 and the server has the capability then do STARTTLS step
+        if imap_port == "143":
+            if "STARTTLS" in capabilitySet:
+                response, data = my_mail.starttls()
+                if options["verbose"]:
+                    print( 'STARTTLS response was: "%s"' % response, file=sys.stderr )
+            else:
+                print( '? Port 143 in use, but no STARTTLS available: Connection is not encrypted' )
         try:
         # Log in using your credentials
             my_mail.login(user, password)
@@ -167,11 +182,6 @@ def main():
             print( '?? Login to server "%s" as "%s" failed?' % ( imap_url, user ), file=sys.stderr)
             exit( 3 )
         else:
-            # Show Protocol version if verbose output is selected
-            if options["verbose"]:
-                print( 'Server "%s" runs protocol version: "%s"' % ( imap_url, my_mail.PROTOCOL_VERSION ), file=sys.stderr)
-            #    response, data = my_mail.list()
-            #    print( data )
             # Select the mailbox (read-only) from which to fetch messages
             response, data = my_mail.select( mbox, True)
             if response != 'OK' :
