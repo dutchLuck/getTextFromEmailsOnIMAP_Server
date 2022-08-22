@@ -4,7 +4,9 @@
 #
 # This script prints out text from emails to stdout
 #
-# Last Modified on Mon Aug 15 22:23:05 2022
+# Last Modified on Mon Aug 22 21:43:31 2022
+#
+# 0v1 Reworked the code to make it less monolithic
 #
 # This code is an expansion of demo code provided by
 # Dr Sreenivas Bhattiprolu (a.k.a. "bnsreenu" or "DigitalSreeni")
@@ -35,10 +37,20 @@ from datetime import datetime
 import sys  # sys.argv
 import getopt  # getopt()
 #
+# Set up items that can be specified from the command line
+# Items specified on the command line over-ride config data
+# that may be supplied from a json file.
 options = {
     "debug": False,
     "file" : "getTextFromEmailsOnIMAP_Server.json",
     "help": False,
+    "key": "",
+    "mailbox": "",
+    "password": "",
+    "port": "",
+    "server": "",
+    "term": "",
+    "user": "",
     "verbose": False,
     "wait": float(2),
 }
@@ -57,93 +69,39 @@ configData = [
 ]
 #
 #
-def usage():
-    print( "Usage:\n%s [-DfA.BhvwX.X]" % sys.argv[0])
-    print( " where; -")
-    print( "   -D or --debug    prints out Debug information")
-    print( "   -fABC.DEF        specify configuration in a json file")
-    print( "   -h or --help     outputs this usage message")
-    print( "   -v or --verbose  prints verbose output")
-    print( "   -wX.X            wait X.X sec instead of default 2 sec before timing-out")
-    print( " E.g.; -")
-    print( "   ", sys.argv[0], " -v -w5")
-#
-#
-def processCommandLine():
-    try:
-        opts, args = getopt.getopt(
-            sys.argv[1:],
-            "Df:hvw:",
-            [
-                "debug",
-                "",
-                "help",
-                "verbose",
-                "",
-            ],
-        )
-    except getopt.GetoptError as err:
-        print( str(err))
-        usage()
-        sys.exit()
-    for o, a in opts:
-        if o in ("-D", "--debug"):
-            options["debug"] = True
-        elif o in ("-f", "--file"):
-            options["file"] = a
-        elif o in ("-h", "--help"):
-            options["help"] = True
-        elif o in ("-v", "--verbose"):
-            options["verbose"] = True
-        elif o in "-w":
-            options["wait"] = float(a)
-            if options["wait"] < 0.0:
-                options["wait"] = 0.0
-    if options["debug"]:
-        options["verbose"] = True  # Debug implies verbose output
-    return args
+def outputMessageText( msgs ):
+    #Now we have all messages, but with a lot of details
+    #Let us extract the right text and print on the screen
 
-def main():
-    capabilitySet = {}
-    args = processCommandLine()
-    if options["help"]:
-        usage()
-        exit(0)
+    #In a multipart e-mail, email.message.Message.get_payload() returns a 
+    # list with one item for each part. The easiest way is to walk the message 
+    # and get the payload on each part:
+    # https://stackoverflow.com/questions/1463074/how-can-i-get-an-email-messages-text-content-using-python
+
+    # NOTE that a Message object consists of headers and payloads.
+
+    cnt = 1
+    for msg in msgs[::-1]:
+        for response_part in msg:
+            if type(response_part) is tuple:
+                my_msg=email.message_from_bytes((response_part[1]))
+                print("_________________________________________________.#(%05d)#._________" % cnt )
+                cnt = cnt + 1
+                print ("subj:", my_msg['subject'])
+                print ("from:", my_msg['from'])
+                print ("date:", my_msg['date'])
+                print ("body:")
+                for part in my_msg.walk():  
+                    #print(part.get_content_type())
+                    if part.get_content_type() == 'text/plain':
+                        print (part.get_payload())
+    print("_________________________________________________.#(00000)#._________")
+
+
+def getIMAP_AccountEmailText( imap_url, imap_port, user, password, mbox, key, value ):    
     #
-    # Read config details from external json file
-    try:
-        with open( options[ "file" ], "r" ) as f:
-            configData = json.load(f)
-    except (FileNotFoundError) as e:
-        print(e, file=sys.stderr)
-    else:
-        # 
-        # Define the email user name and passwd
-        user, password = configData[0]["user"], configData[0]["password"]
-        # Define URL and port for IMAP connection
-        imap_url, imap_port = configData[0]["url"], configData[0]["port"]
-        # Define the mailbox for IMAP connection
-        mbox = configData[0]["mailbox"]
-        # Define search key and map for IMAP connection
-        key, value = configData[0]["key"], configData[0]["value"]
-
-    if len(user) == 0:
-        print("?? User Account name is not specified?", file=sys.stderr)
-        exit(1)
-    if len(password) == 0:
-        print("?? User Password is not specified?", file=sys.stderr)
-        exit(2)
-    # Setup default search for emails from the current day
-    # searching the inbox for datestamp containing
-    # todays date.
-    if len(mbox) == 0:
-        mbox = "Inbox"
-    if len(key) == 0:
-        key = "Date"
-    if len(value) == 0:
-        now = datetime.now()			# current date and time
-        value = now.strftime("%Y-%m-%d")	# Year-Month-DayOfMonth
-
+    # Set up an IMAP capability set with zero members
+    capabilitySet = {}
     # Establish connection with mail server using SSL if using port 933
     #  otherwise establish connetion and then establish SSL later
     try:
@@ -206,38 +164,192 @@ def main():
 
                     #Unselect the mailbox with close as unselect() wasn't available
                     my_mail.close()
-
-                    #Now we have all messages, but with a lot of details
-                    #Let us extract the right text and print on the screen
-
-                    #In a multipart e-mail, email.message.Message.get_payload() returns a 
-                    # list with one item for each part. The easiest way is to walk the message 
-                    # and get the payload on each part:
-                    # https://stackoverflow.com/questions/1463074/how-can-i-get-an-email-messages-text-content-using-python
-
-                    # NOTE that a Message object consists of headers and payloads.
-
-                    cnt = 1
-                    for msg in msgs[::-1]:
-                        for response_part in msg:
-                            if type(response_part) is tuple:
-                                my_msg=email.message_from_bytes((response_part[1]))
-                                print("_________________________________________________.#(%05d)#._________" % cnt )
-                                cnt = cnt + 1
-                                print ("subj:", my_msg['subject'])
-                                print ("from:", my_msg['from'])
-                                print ("date:", my_msg['date'])
-                                print ("body:")
-                                for part in my_msg.walk():  
-                                    #print(part.get_content_type())
-                                    if part.get_content_type() == 'text/plain':
-                                        print (part.get_payload())
-
+                    #
+                    outputMessageText( msgs )
+                    
     #Logout of the server
     response, data = my_mail.logout()
-    print("_________________________________________________.#(00000)#._________")
     if options["verbose"]:
         print( 'IMAP Server response to logout request was "%s"' % response, file=sys.stderr )
+#
+#
+def printOutAllTheOptions():
+    print( "Command line options are; -" )
+    print( ' Debug Flag is: "%s"' % options["debug"] )
+    print( ' File name is: "%s"' % options["file"] )
+    print( ' Help Flag is: "%s"' % options["help"] )
+    print( ' Key descriptor is: "%s"' % options["key"] )
+    print( ' Mailbox name is: "%s"' % options["mailbox"] )
+    print( ' Password string is: "%s"' % options["password"] )
+    print( ' Port number is: "%s"' % options["port"] )
+    print( ' Server name is: "%s"' % options["server"] )
+    print( ' Term to search for is: "%s"' % options["term"] )
+    print( ' User account name is: "%s"' % options["user"] )
+    print( ' Verbose Flag is: "%s"' % options["verbose"] )
+    print( ' Wait time is: "%s"' % options["wait"] )
 
+
+def printOutAllConfigFileOptions():
+    print( "Config File specified options are; -" )
+    print( ' Key descriptor is: "%s"' % configData[0]["key"] )
+    print( ' Mailbox name is: "%s"' % configData[0]["mailbox"] )
+    print( ' Password string is: "%s"' % configData[0]["password"] )
+    print( ' Port number is: "%s"' % configData[0]["port"] )
+    print( ' Server name is: "%s"' % configData[0]["url"] )
+    print( ' Term to search for is: "%s"' % configData[0]["value"] )
+    print( ' User account name is: "%s"' % configData[0]["user"] )
+
+
+def usage():
+    print( "Usage:\n%s [-D -fA.B -h -kABC -pABC -Pxyz -sABC -tABC -uABC -vwX.X]" % sys.argv[0])
+    print( " where; -")
+    print( "   -D or --debug    prints out Debug information")
+    print( "   -fABC.DEF        specify configuration in a json file")
+    print( "   -h or --help     outputs this usage message")
+    print( "   -kABC            specify key to search")
+    print( "   -pABC            specify login password")
+    print( "   -Pxyz            specify IMAP port number")
+    print( "   -sABC            specify IMAP server name or IP address")
+    print( "   -tABC            specify term to search with")
+    print( "   -uABC            specify user account name")
+    print( "   -v or --verbose  prints verbose output")
+    print( "   -wX.X            wait X.X sec instead of default 2 sec before timing-out")
+    print( " E.g.; -")
+    print( "   ", sys.argv[0], " -v -w5")
+#
+#
+def processCommandLine():
+    try:
+        opts, args = getopt.getopt(
+            sys.argv[1:],
+            "Df:hk:m:p:P:s:t:u:vw:",
+            [
+                "debug",
+                "",
+                "help",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "verbose",
+                "",
+            ],
+        )
+    except getopt.GetoptError as err:
+        print( str(err))
+        usage()
+        sys.exit()
+    for o, a in opts:
+        if o in ("-D", "--debug"):
+            options["debug"] = True
+        elif o in ("-f", "--file"):
+            options["file"] = a
+        elif o in ("-h", "--help"):
+            options["help"] = True
+        elif o in ("-k", "--key"):
+            options["key"] = a
+        elif o in ("-k", "--key"):
+            options["key"] = a
+        elif o in ("-m", "--mailbox"):
+            options["mailbox"] = a
+        elif o in ("-p", "--password"):
+            options["password"] = a
+        elif o in ("-P", "--port"):
+            options["port"] = a
+        elif o in ("-s", "--server"):
+            options["server"] = a
+        elif o in ("-t", "--term"):
+            options["term"] = a
+        elif o in ("-u", "--user"):
+            options["user"] = a
+        elif o in ("-v", "--verbose"):
+            options["verbose"] = True
+        elif o in "-w":
+            options["wait"] = float(a)
+            if options["wait"] < 0.0:
+                options["wait"] = 0.0
+    if options["debug"]:
+        options["verbose"] = True  # Debug implies verbose output
+    return args
+
+
+def selectValue( optionValue, configValue ):
+    if optionValue != "":
+        return optionValue
+    elif configValue != "":
+        return configValue
+    return ""
+
+
+def main():
+    #
+    # Read config details from command line
+    # Get any information that maybe in the command line
+    args = processCommandLine()
+    # If help is requested in the command line then print them & exit
+    if options["help"]:
+        usage()
+        exit(0)
+    # 
+    if options["debug"]:
+        printOutAllTheOptions()
+        print()
+    #
+    # Read config details from external json file
+    try:
+        with open( options[ "file" ], "r" ) as f:
+            configData = json.load(f)
+    except (FileNotFoundError) as e:
+        print(e, file=sys.stderr)
+        exit()
+    else:
+        if options["debug"]:
+            printOutAllConfigFileOptions()
+            print()
+        # 
+        # Define the email user name
+        user = selectValue( options["user"], configData[0]["user"])
+        # Define the email user passwd
+        password = selectValue( options["password"], configData[0]["password"])
+        # Define Server name for IMAP connection
+        imap_url = selectValue( options["server"], configData[0]["url"])
+        # Define Server port for IMAP connection
+        imap_port = selectValue( options["port"], configData[0]["port"])
+        # Define the mailbox for IMAP connection
+        mbox = selectValue( options["mailbox"], configData[0]["mailbox"])
+        # Define search key IMAP connection
+        key = selectValue( options["key"], configData[0]["key"])
+        # Define search map for IMAP connection
+        value = selectValue( options["term"], configData[0]["value"])
+        #
+        if options["debug"]:
+            print( 'User: "%s"; Password: "%s"' % ( user, password))
+            print( 'Server: "%s"; Port: "%s"' % ( imap_url, imap_port))
+            print( 'MailBox: "%s"; Key: "%s"; Term: "%s"' % ( mbox, key, value))
+            print()
+
+    if len(user) == 0:
+        print("?? User Account name is not specified?", file=sys.stderr)
+        exit(1)
+    if len(password) == 0:
+        print("?? User Password is not specified?", file=sys.stderr)
+        exit(2)
+    # Setup default search for emails from the current day
+    # searching the inbox for datestamp containing
+    # todays date.
+    if len(mbox) == 0:
+        mbox = "Inbox"
+    if len(key) == 0:
+        key = "Date"
+    if len(value) == 0:
+        now = datetime.now()			# current date and time
+        value = now.strftime("%Y-%m-%d")	# Year-Month-DayOfMonth
+    #
+    # Login then get the EMail Texts IMAP Server
+    getIMAP_AccountEmailText( imap_url, imap_port, user, password, mbox, key, value )
+    
 if __name__ == "__main__":
     main()
