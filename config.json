@@ -7,5 +7,14 @@
     "mailbox" : "Inbox",
     "category" : "Subject",
     "term" : "Test"
+  },
+  {
+    "server" : "outlook.office365.com",
+    "port" : "993",
+    "user" : "your-microsoft-account-name-here",
+    "password" : "your-microsoft-acount-password-here",
+    "mailbox" : "Inbox",
+    "category" : "Subject",
+    "term" : "Test"
   }
 ]
