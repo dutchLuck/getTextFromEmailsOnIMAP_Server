@@ -4,10 +4,17 @@
 #
 # This script prints out text from emails to stdout
 #
-# Last Modified on Sun Aug 28 21:58:51 2022
+# Last Modified on Tue Aug 30 10:00:00 2022
 #
+# 0v3 Loop through multiple configs if supplied in the json file
 # 0v2 Use better defaults to handle missing config info
 # 0v1 Reworked the code to make it less monolithic
+#
+# Features / Bugs yet to be sorted; -
+#  Searching for emails that arrived on a particular date
+#  Output email text to a file, instead of stdout
+#  Failure of STARTTLS connection attempts (Python 3.8.10 / Ubuntu 20.04)
+#  Multiple searches in the same login session
 #
 # This code is an expansion of demo code provided by
 # Dr Sreenivas Bhattiprolu (a.k.a. "bnsreenu" or "DigitalSreeni")
@@ -33,11 +40,11 @@ The system gives you a password that you need to use to authenticate from python
 import sys
 import imaplib
 import email
-import json  #Load config from a json format file
+import json  # Load config from a json format file
 from datetime import datetime
 import sys  # sys.argv
 import getopt  # getopt()
-import getpass  #getpass()
+import getpass  # getpass()
 #
 # Set up items that can be specified from the command line
 # Items specified on the command line over-ride config data
@@ -287,7 +294,7 @@ def processCommandLine():
     return args
 
 
-def getEmailText( optionList, debugFlag ):
+def getEmailText( optionList, flags ):
     # Define the email user name
     user = optionList["user"]
     # Define the email user passwd
@@ -316,14 +323,13 @@ def getEmailText( optionList, debugFlag ):
 #        now = datetime.now()			# current date and time
 #        term = "\"" + "\\" + "\"" + now.strftime("%d %b %Y") + "\\" + "\"" + "\""	# DayOfMonth Month Year
     #
-    if debugFlag:
+    if flags["debug"] or flags["verbose"]:
         print( 'User: "%s"; Password: "%s"' % ( user, password))
         print( 'Server: "%s"; Port: "%s"' % ( imapServer, imapPort))
         print( 'MailBox: "%s"; category: "%s"; Term: "%s"' % ( mbox, category, term))
-        print()
     #
     # Login then get the EMail Texts IMAP Server
-    getIMAP_AccountEmailText( imapServer, imapPort, user, password, mbox, category, term, debugFlag )
+    getIMAP_AccountEmailText( imapServer, imapPort, user, password, mbox, category, term, flags["debug"] )
 
 
 def main():
@@ -348,7 +354,7 @@ def main():
         if options["password"] == "":
             promptStr = 'Enter ' + options["user"] + ' Password: '
             options["password"] = getpass.getpass( prompt=promptStr, stream=None )
-        getEmailText( options, options["debug"] )
+        getEmailText( options, options )
        
     # If command line options specify a json file then
     # Read config details from external json file
@@ -360,14 +366,21 @@ def main():
             print(e, file=sys.stderr)
             exit()
         else:
-        # If json file info has at least the server and user specified
-        # then try to get the password if it wasn't specified
-            if( configData[0]["server"] != "") and (configData[0]["user"] != "" ):
-                if configData[0]["password"] == "":
-                    promptStr = 'Enter ' + configData[0]["user"] + ' Password: '
-                    configData[0]["password"] = getpass.getpass( prompt=promptStr, stream=None )
-                getEmailText( configData[0], options["debug"] )
+        # If the json file supplied multiple email configs
+        # then loop through the configs
+            indx = 0
+            if options["debug"]:
+                print( '{} configs supplied by file "{}"'.format( len( configData ), options["file"]))
+            while( indx < len( configData )):       # More pythonic style loop needed?
+                # If json file info has at least the server and user specified
+                # then try to get the password if it wasn't specified
+                if( configData[indx]["server"] != "") and (configData[indx]["user"] != "" ):
+                    if configData[indx]["password"] == "":
+                        promptStr = 'Enter ' + configData[indx]["user"] + ' Password: '
+                        configData[indx]["password"] = getpass.getpass( prompt=promptStr, stream=None )
+                    getEmailText( configData[indx], options )
+                indx = indx + 1
 
-        
+
 if __name__ == "__main__":
     main()
