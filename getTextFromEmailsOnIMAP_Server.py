@@ -4,8 +4,9 @@
 #
 # This script prints out text from emails to stdout
 #
-# Last Modified on Tue Aug 30 10:00:00 2022
+# Last Modified on Thu Sep  8 21:46:09 2022
 #
+# 0v4 Output HTML triggered by -H option. Useage updated.
 # 0v3 Loop through multiple configs if supplied in the json file
 # 0v2 Use better defaults to handle missing config info
 # 0v1 Reworked the code to make it less monolithic
@@ -13,6 +14,7 @@
 # Features / Bugs yet to be sorted; -
 #  Searching for emails that arrived on a particular date
 #  Output email text to a file, instead of stdout
+#  Option to output html from selected emails if available?
 #  Failure of STARTTLS connection attempts (Python 3.8.10 / Ubuntu 20.04)
 #  Multiple searches in the same login session
 #
@@ -37,12 +39,12 @@ The system gives you a password that you need to use to authenticate from python
 #
 # For Search categorys other than Subject: https://gist.github.com/martinrusev/6121028#file-imap-search
 #
-import sys
+import sys  # sys.argv, version_info
 import imaplib
 import email
 import json  # Load config from a json format file
 from datetime import datetime
-import sys  # sys.argv
+import os  # os.path.basename
 import getopt  # getopt()
 import getpass  # getpass()
 #
@@ -53,6 +55,7 @@ options = {
     "debug": False,
     "file" : "",
     "help": False,
+    "html": False,
     "category": "",
     "mailbox": "",
     "password": "",
@@ -78,7 +81,7 @@ configData = [
 ]
 
 
-def outputMessageText( msgs ):
+def outputMessageText( msgs, flags ):
     #Now we have all messages, but with a lot of details
     #we can extract the text and print it on the screen
 
@@ -92,29 +95,40 @@ def outputMessageText( msgs ):
     cnt = 1
     for msg in msgs[::-1]:
         for response_part in msg:
-            if type(response_part) is tuple:
+            if type( response_part ) is tuple:
+                print( "_________________________________________________.#(%05d)#._________" % cnt )
+                my_msg = email.message_from_bytes( response_part[1] )
                 # print( response_part )
-                # print( email.message_from_bytes((response_part[0])))
-                my_msg=email.message_from_bytes((response_part[1]))
-                print("_________________________________________________.#(%05d)#._________" % cnt )
-                # print(my_msg)
+                if "verbose" in flags.keys() and flags["verbose"]:
+                    print( email.message_from_bytes( response_part[0] ))
+                if "debug" in flags.keys() and flags["debug"]:
+                    print( my_msg )
                 cnt = cnt + 1
-                print("Subject:", my_msg['subject'])
-                print("To:", my_msg['to'])
-                print("From:", my_msg['from'])
-                print("Date:", my_msg['date'])
-                print("Body:")
+                print( "Subject:", my_msg['subject'])
+                print( "To:", my_msg['to'])
+                print( "From:", my_msg['from'])
+                print( "Date:", my_msg['date'])
+                if "verbose" in flags.keys() and flags["verbose"]:
+                    print( "Return-Path:", my_msg['return-path'])
+                    print( "Received:", my_msg['received'])
+                print( "Body; -")
                 for part in my_msg.walk():  
-                    # print(part.get_content_type())
+                    # print( part.get_content_type())
                     if part.get_content_type() == 'text/plain':
-                        print(part.get_payload())
-    print("_________________________________________________.#(00000)#._________")
+                        print( part.get_payload())
+                    if "html" in flags.keys() and flags["html"]:
+                        if part.get_content_type() == 'text/html':
+                            print( part.get_payload())
+    print( "_________________________________________________.#(00000)#._________")
 
 
-def getIMAP_AccountEmailText( server, port, user, password, mbox, category, term, verboseFlag ):    
+def getIMAP_AccountEmailMessages( server, port, user, password, mbox, category, term, verboseFlag ):    
     #
     # Set up an IMAP capability set with zero members
     capabilitySet = {}
+    # Set up a list of messages to return
+    msgs = [] # list to hold all matched messages (empty at this point, of course)
+    #
     # Establish connection with mail server using SSL if using port 993
     #  otherwise establish connetion and then establish SSL later
     try:
@@ -175,21 +189,20 @@ def getIMAP_AccountEmailText( server, port, user, password, mbox, category, term
                         print( 'Searching "%s": "%s" for "%s"' % ( mbox, category, term ), file=sys.stderr)
                     mail_id_list = data[0].split()  #IDs of all emails that we want to fetch 
 
-                    msgs = [] # empty list to capture all messages
                     #Iterate through messages and extract data into the msgs list
                     for num in mail_id_list:
                         typ, data = my_mail.fetch(num, '(RFC822)') #RFC822 returns whole message (BODY fetches just body)
                         msgs.append(data)
 
-                    #Unselect the mailbox with close as unselect() wasn't available
+                    #Unselect the mailbox with close() as unselect() wasn't available?
                     my_mail.close()
                     #
-                    outputMessageText( msgs )
                     
         #Logout of the server
         response, data = my_mail.logout()
         if verboseFlag:
             print( 'IMAP Server response to logout request was "%s"' % response, file=sys.stderr )
+    return msgs
 
 
 def printOutAllTheOptions():
@@ -197,6 +210,7 @@ def printOutAllTheOptions():
     print( ' Debug Flag is: "%s"' % options["debug"] )
     print( ' File name is: "%s"' % options["file"] )
     print( ' Help Flag is: "%s"' % options["help"] )
+    print( ' HTML output Flag is: "%s"' % options["html"] )
     print( ' category descriptor is: "%s"' % options["category"] )
     print( ' Mailbox name is: "%s"' % options["mailbox"] )
     print( ' Password string is: "%s"' % options["password"] )
@@ -220,12 +234,13 @@ def printOutAllConfigFileOptions():
 
 
 def usage():
-    print( "Usage:\n%s [ -cABC -D -fA.B -h -mABC -pABC -Pxyz -sABC -tABC -uABC -v ]" % sys.argv[0])
-    print( " where; -")
+    print( "Usage:\n %s [ -cABC -D -fA.B -h -mABC -pABC -Pxyz -sABC -tABC -uABC -v ]" % os.path.basename( sys.argv[0]))
+    print( "  where; -")
     print( "   -cABC            specify category to search; e.g. Subject, To, From, Body")
     print( "   -D or --debug    prints out Debug information")
     print( "   -fABC.DEF        specify configuration json file")
     print( "   -h or --help     outputs this usage message")
+    print( "   -H or --html     specify output to include html part of email if it exists")
     print( "   -mABC            specify name of mailbox; e.g. Inbox, Sent")
     print( "   -pABC            specify login password")
     print( "   -Pxyz            specify IMAP port number; e.g 993, 143")
@@ -235,19 +250,20 @@ def usage():
     print( "   -v or --verbose  prints verbose output")
 #    print( "   -wX.X            wait X.X sec instead of default 2 sec before timing-out")
     print( " E.g.; -")
-    print( "   ", sys.argv[0], " -v -s imap.gmail.com -u ozzie193 -m Inbox -c From -t mrcat84")
+    print( "  ", os.path.basename( sys.argv[0]), " -v -s imap.gmail.com -u ozzie193 -m Inbox -c From -t mrcat84")
 
 
 def processCommandLine():
     try:
         opts, args = getopt.getopt(
             sys.argv[1:],
-            "c:Df:hm:p:P:s:t:u:vw:",
+            "c:Df:hHm:p:P:s:t:u:vw:",
             [
                 "",
                 "debug",
                 "",
                 "help",
+                "html",
                 "",
                 "",
                 "",
@@ -271,6 +287,8 @@ def processCommandLine():
             options["file"] = a
         elif o in ("-h", "--help"):
             options["help"] = True
+        elif o in ("-H", "--html"):
+            options["html"] = True
         elif o in ("-m", "--mailbox"):
             options["mailbox"] = a
         elif o in ("-p", "--password"):
@@ -294,7 +312,7 @@ def processCommandLine():
     return args
 
 
-def getEmailText( optionList, flags ):
+def getEmailMessagesFromIMAP_Server( optionList, flags ):
     # Define the email user name
     user = optionList["user"]
     # Define the email user passwd
@@ -328,8 +346,9 @@ def getEmailText( optionList, flags ):
         print( 'Server: "%s"; Port: "%s"' % ( imapServer, imapPort))
         print( 'MailBox: "%s"; category: "%s"; Term: "%s"' % ( mbox, category, term))
     #
-    # Login then get the EMail Texts IMAP Server
-    getIMAP_AccountEmailText( imapServer, imapPort, user, password, mbox, category, term, flags["debug"] )
+    # Login then get the EMail Messages found by the search of the IMAP Server
+    msgs = getIMAP_AccountEmailMessages( imapServer, imapPort, user, password, mbox, category, term, flags["debug"] )
+    outputMessageText( msgs, flags )
 
 
 def main():
@@ -338,8 +357,14 @@ def main():
     # Set global options from information that maybe in the command line
     args = processCommandLine()
     #
+    if options["verbose"]:
+        print('getTextFromEmailsOnIMAP_Server 0v4', file=sys.stderr)
+    if options["debug"]:
+        print( 'Python interpreter: ', sys.version, file=sys.stderr)
+    #
     # If help is requested in the command line then print them & exit
-    if options["help"]:
+    # If insufficient information is supplied also print useage info
+    if options["help"] or (options["server"] == "" and options["file"] == ""):
         usage()
         exit(0)
     #
@@ -378,7 +403,7 @@ def main():
                     if configData[indx]["password"] == "":
                         promptStr = 'Enter ' + configData[indx]["user"] + ' Password: '
                         configData[indx]["password"] = getpass.getpass( prompt=promptStr, stream=None )
-                    getEmailText( configData[indx], options )
+                    getEmailMessagesFromIMAP_Server( configData[indx], options )
                 indx = indx + 1
 
 
