@@ -5,5 +5,4 @@ This code is an expansion of demo code provided by Dr Sreenivas Bhattiprolu (a.k
 https://github.com/bnsreenu/python_for_microscopists/tree/master/AMT_02_extract_gmails_from_a_user
 ```
 This code is able to fetch text from emails on gmail and office365 accounts, using python 3.8
-on Win10, OSX  & Linux.
-
+on Win10, OSX & Linux.
