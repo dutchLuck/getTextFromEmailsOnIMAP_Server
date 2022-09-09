@@ -1,5 +1,5 @@
 # getTextFromEmailsOnIMAP_Server
-List text from emails that are homatch the search criteria.
+List text from emails that match the search criteria in a given mailbox on a given IMAP mail server.
 This code is an expansion of demo code provided by Dr Sreenivas Bhattiprolu (a.k.a. "bnsreenu" or "DigitalSreeni") ( see video https://youtu.be/K21BSZPFIjQ )
 ```
 https://github.com/bnsreenu/python_for_microscopists/tree/master/AMT_02_extract_gmails_from_a_user
