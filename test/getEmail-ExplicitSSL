@@ -1,0 +1,40 @@
+#! /bin/bash
+#
+# Show all data from a particular EMail on a server and
+# thus help cross-check output from python code, plus
+# to check EXPLICIT SSL (i.e. STARTTLS) works on
+# on a given combination of linux system and mail server.
+#
+# This script requires cURL to be installed.
+#
+curl --version
+#
+echo "-------------------------------------------------------------------------------------"
+#
+# Set up some defaults, if the script is invoked without
+# command line options being specified.
+INDX=1
+MBX=inbox
+IMAP_MCHN=your_imap_mail_server_name_here
+ACCT_NM=your_email_account_name_here
+ACCT_PW=your_email_account_password_here
+#
+# Get commandm line options if they exist
+if [[ "$1" != "" ]] ; then
+  INDX=$1
+  if [[ "$2" != "" ]] ; then
+    MBX=$2
+    if [[ "$3" != "" ]] ; then
+      IMAP_MCHN=$3
+      if [[ "$4" != "" ]] ; then
+        ACCT_NM=$4
+        if [[ "$5" != "" ]] ; then
+          ACCT_PW=$5
+        fi
+      fi
+    fi
+  fi
+fi
+#
+# use curl to output the email data at the specified index.
+curl --ssl-req --url "imap://${IMAP_MCHN}/${MBX};MAILINDEX=${INDX}" -u ${ACCT_NM}:${ACCT_PW}
